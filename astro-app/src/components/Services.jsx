@@ -1,47 +1,65 @@
+import { useTranslation } from 'react-i18next';
 import './Services.css';
 
-const SERVICES = [
-  {
-    icon: '🔭',
-    title: 'Free Cosmic Reading',
-    desc: 'Instant birth sign analysis, personality overview, lucky numbers, gemstones and element.',
-    features: ['Birth sign analysis', 'Personality overview', 'Lucky numbers & colors', 'Gemstone suggestion'],
-    price: 'Free',
-    cta: 'Get Free Reading',
-    href: '#prediction',
-    featured: false,
-  },
-  {
-    icon: '🌟',
-    title: 'Premium Consultation',
-    desc: 'Full birth chart analysis with career, relationships, remedies and session recording.',
-    features: ['Full birth chart', 'Career & relationships', 'Personalized remedies', 'Session recording'],
-    price: '₹500',
-    period: '/ 30 min',
-    cta: 'Book Now',
-    href: '#booking',
-    featured: true,
-    badge: 'Most Popular',
-  },
-  {
-    icon: '📜',
-    title: 'Detailed Report',
-    desc: 'Written PDF report with complete analysis, remedies, and 12-month yearly forecast.',
-    features: ['Complete PDF report', 'Full chart analysis', 'Remedies & gemstones', '12-month forecast'],
-    price: '₹1500',
-    period: '/ report',
-    cta: 'Order Report',
-    href: '#booking',
-    featured: false,
-  },
-];
-
 export default function Services() {
+  const { t } = useTranslation();
+
+  const SERVICES = [
+    {
+      icon: '🔭',
+      title: t('services.list.free.title'),
+      desc: t('services.list.free.desc'),
+      features: [
+        'Birth sign analysis',
+        'Personality overview',
+        'Lucky numbers & colors',
+        'Gemstone suggestion'
+      ],
+      price: 'Free',
+      cta: t('services.list.free.cta'),
+      href: '#prediction',
+      featured: false,
+    },
+    {
+      icon: '🌟',
+      title: t('services.list.premium.title'),
+      desc: t('services.list.premium.desc'),
+      features: [
+        'Full birth chart',
+        'Career & relationships',
+        'Personalized remedies',
+        'Session recording'
+      ],
+      price: '₹500',
+      period: t('booking.period'),
+      cta: t('services.list.premium.cta'),
+      href: '#booking',
+      featured: true,
+      badge: t('services.list.premium.badge'),
+    },
+    {
+      icon: '📜',
+      title: t('services.list.report.title'),
+      desc: t('services.list.report.desc'),
+      features: [
+        'Complete PDF report',
+        'Full chart analysis',
+        'Remedies & gemstones',
+        '12-month forecast'
+      ],
+      price: '₹1500',
+      period: '/ report',
+      cta: t('services.list.report.cta'),
+      href: '#booking',
+      featured: false,
+    },
+  ];
+
   return (
     <section id="services" className="services gold-border-top">
       <div className="container">
-        <span className="section-label">✦ Offerings ✦</span>
-        <h2 className="section-title">Services &amp; Offerings</h2>
+        <span className="section-label">✦ {t('services.label')} ✦</span>
+        <h2 className="section-title">{t('services.title')}</h2>
         <div className="section-divider" />
 
         <div className="services__grid">

@@ -1,131 +1,391 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../lib/supabase.js';
 import './Admin.css';
 
+/* ── Stat card ─────────────────────────────────────────────────── */
+function StatCard({ label, value, icon, sub }) {
+  return (
+    <div className="admin-stat card">
+      <div style={{ fontSize: '28px', marginBottom: '8px' }}>{icon}</div>
+      <div className="admin-stat__val">{value}</div>
+      <div className="admin-stat__label">{label}</div>
+      {sub && <div style={{ fontSize: '11px', color: 'rgba(245,239,224,0.35)', marginTop: '4px' }}>{sub}</div>}
+    </div>
+  );
+}
+
+/* ── Status badge ───────────────────────────────────────────────── */
+function Badge({ status }) {
+  const map = {
+    pending:   { bg: 'rgba(251,191,36,0.15)', color: '#fbbf24', label: 'Pending' },
+    confirmed: { bg: 'rgba(34,197,94,0.15)',  color: '#22c55e', label: 'Confirmed' },
+    completed: { bg: 'rgba(99,102,241,0.15)', color: '#818cf8', label: 'Completed' },
+    cancelled: { bg: 'rgba(239,68,68,0.15)',  color: '#f87171', label: 'Cancelled' },
+  };
+  const s = map[status] || map.pending;
+  return (
+    <span style={{
+      background: s.bg, color: s.color,
+      padding: '3px 10px', borderRadius: '20px',
+      fontSize: '11px', fontWeight: 600, letterSpacing: '0.04em'
+    }}>{s.label}</span>
+  );
+}
+
+/* ── Main Admin component ───────────────────────────────────────── */
 export default function Admin() {
-  const [authed, setAuthed] = useState(false);
-  const [pw, setPw] = useState('');
-  const [err, setErr] = useState('');
-  const [users, setUsers] = useState([]);
-  const [payments, setPayments] = useState([]);
-  const [price, setPrice] = useState(500);
-  const [duration, setDuration] = useState(30);
+  const [authed,      setAuthed]      = useState(false);
+  const [email,       setEmail]       = useState('');
+  const [password,    setPassword]    = useState('');
+  const [err,         setErr]         = useState('');
+  const [loading,     setLoading]     = useState(false);
 
+  // Data
+  const [predictions, setPredictions] = useState([]);
+  const [bookings,    setBookings]    = useState([]);
+  const [tab,         setTab]         = useState('overview'); // 'overview' | 'predictions' | 'bookings'
+  const [dataLoading, setDataLoading] = useState(false);
+
+  /* ── Auth: check existing session on mount ─ */
   useEffect(() => {
-    if (authed) {
-      setUsers(JSON.parse(localStorage.getItem('astroUsers') || '[]'));
-      setPayments(JSON.parse(localStorage.getItem('astroPayments') || '[]'));
-      const p = localStorage.getItem('chatPrice');
-      const d = localStorage.getItem('chatDuration');
-      if (p) setPrice(Number(p));
-      if (d) setDuration(Number(d));
-    }
-  }, [authed]);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setAuthed(true);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthed(!!session);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
-  const login = (e) => {
+  /* ── Load data when authed ─ */
+  const loadData = useCallback(async () => {
+    setDataLoading(true);
+    const [{ data: preds }, { data: books }] = await Promise.all([
+      supabase.from('free_predictions').select('*').order('created_at', { ascending: false }),
+      supabase.from('bookings').select('*').order('created_at', { ascending: false }),
+    ]);
+    setPredictions(preds || []);
+    setBookings(books || []);
+    setDataLoading(false);
+  }, []);
+
+  useEffect(() => { if (authed) loadData(); }, [authed, loadData]);
+
+  /* ── Login ─ */
+  const login = async (e) => {
     e.preventDefault();
-    if (pw === 'admin123') { setAuthed(true); setErr(''); }
-    else setErr('Invalid password. Please try again.');
+    setLoading(true); setErr('');
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) setErr(error.message);
+    setLoading(false);
   };
 
-  const saveSettings = (e) => {
-    e.preventDefault();
-    localStorage.setItem('chatPrice', price);
-    localStorage.setItem('chatDuration', duration);
-    alert('Settings saved!');
+  /* ── Logout ─ */
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setAuthed(false);
   };
 
-  const totalRevenue = payments.reduce((s, p) => s + p.amount, 0);
-  const pending = payments.filter(p => p.status === 'pending').length;
+  /* ── Update booking status ─ */
+  const updateStatus = async (id, status) => {
+    await supabase.from('bookings').update({ status }).eq('id', id);
+    loadData();
+  };
 
+  // ── Computed stats ───
+  const totalRevenue = bookings.filter(b => b.status === 'completed').reduce((s, b) => s + (b.amount || 0), 0);
+  const pending      = bookings.filter(b => b.status === 'pending').length;
+  const confirmed    = bookings.filter(b => b.status === 'confirmed').length;
+  const todayPreds   = predictions.filter(p => p.created_at?.startsWith(new Date().toISOString().slice(0, 10))).length;
+
+  /* ════════════════════════════════════
+     LOGIN SCREEN
+  ════════════════════════════════════ */
   if (!authed) {
     return (
       <div className="admin-login">
-        <h2 className="admin-login__title">Admin Access</h2>
+        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+          <div style={{ fontSize: '36px', marginBottom: '8px' }}>☽</div>
+          <h2 className="admin-login__title">Admin Portal</h2>
+          <p style={{ fontSize: '13px', color: 'rgba(245,239,224,0.4)', marginTop: '4px' }}>
+            Cosmic Destiny Dashboard
+          </p>
+        </div>
         <form className="admin-login__form card" onSubmit={login}>
           <div className="form-group">
-            <label htmlFor="admin-pw">Password</label>
-            <input id="admin-pw" type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="Enter password" autoComplete="current-password" />
+            <label htmlFor="admin-email">Email</label>
+            <input
+              id="admin-email" type="email"
+              value={email} onChange={e => setEmail(e.target.value)}
+              placeholder="admin@example.com" autoComplete="email"
+            />
           </div>
-          {err && <p className="admin-login__err">{err}</p>}
-          <button type="submit" className="btn-gold btn-gold-filled" style={{ width:'100%', marginTop:'0.5rem' }}>Enter</button>
+          <div className="form-group">
+            <label htmlFor="admin-pw">Password</label>
+            <input
+              id="admin-pw" type="password"
+              value={password} onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••" autoComplete="current-password"
+            />
+          </div>
+          {err && <p className="admin-login__err">⚠ {err}</p>}
+          <button
+            type="submit"
+            className="btn-gold btn-gold-filled"
+            style={{ width: '100%', marginTop: '0.5rem' }}
+            disabled={loading}
+          >
+            {loading ? 'Signing in…' : 'Sign In'}
+          </button>
+          <a href="/" className="btn-gold btn-gold-outline" style={{ display: 'block', textAlign: 'center', width: '100%', marginTop: '10px', textDecoration: 'none' }}>
+            ← Back to Site
+          </a>
         </form>
+        <p style={{ textAlign: 'center', fontSize: '11px', color: 'rgba(245,239,224,0.25)', marginTop: '16px' }}>
+          Access restricted to authorised users only
+        </p>
       </div>
     );
   }
 
+  /* ════════════════════════════════════
+     DASHBOARD
+  ════════════════════════════════════ */
   return (
     <div className="admin-dash">
       <div className="container">
+
+        {/* Header */}
         <div className="admin-dash__header">
-          <h2 className="section-title" style={{ textAlign:'left', marginBottom:0 }}>Admin Dashboard</h2>
-          <button className="btn-gold btn-gold-outline" onClick={() => { setAuthed(false); setPw(''); }}>Logout</button>
+          <div>
+            <h2 className="section-title" style={{ textAlign: 'left', marginBottom: '4px' }}>
+              ☽ Dashboard
+            </h2>
+            <p style={{ fontSize: '12px', color: 'rgba(245,239,224,0.35)', letterSpacing: '0.05em' }}>
+              COSMIC DESTINY ADMIN
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <a
+              href="/"
+              style={{
+                background: 'transparent',
+                border: '1px solid rgba(201,161,74,0.4)',
+                color: '#c9a14a',
+                borderRadius: '8px',
+                padding: '7px 14px',
+                fontSize: '12px',
+                fontWeight: 600,
+                letterSpacing: '0.05em',
+                cursor: 'pointer',
+                textDecoration: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              ← Back to Site
+            </a>
+            <button
+              onClick={loadData}
+              style={{
+                background: 'transparent',
+                border: '1px solid rgba(201,161,74,0.4)',
+                color: '#c9a14a',
+                borderRadius: '8px',
+                padding: '7px 14px',
+                fontSize: '12px',
+                fontWeight: 600,
+                letterSpacing: '0.05em',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              ↺ Refresh
+            </button>
+            <button
+              onClick={logout}
+              style={{
+                background: 'transparent',
+                border: '1px solid rgba(201,161,74,0.4)',
+                color: '#c9a14a',
+                borderRadius: '8px',
+                padding: '7px 14px',
+                fontSize: '12px',
+                fontWeight: 600,
+                letterSpacing: '0.05em',
+                cursor: 'pointer'
+              }}
+            >
+              Logout
+            </button>
+          </div>
         </div>
 
-        {/* Stats */}
+        {/* Stat Cards */}
         <div className="admin-dash__stats">
-          {[
-            { label:'Free Predictions', val: users.length },
-            { label:'Sessions Booked',  val: payments.length },
-            { label:'Total Revenue',    val: `₹${totalRevenue}` },
-            { label:'Pending Sessions', val: pending },
-          ].map(s => (
-            <div key={s.label} className="admin-stat card">
-              <div className="admin-stat__val">{s.val}</div>
-              <div className="admin-stat__label">{s.label}</div>
-            </div>
+          <StatCard icon="🔮" label="Total Free Predictions" value={predictions.length} sub={`${todayPreds} today`} />
+          <StatCard icon="📅" label="Total Bookings"         value={bookings.length}    sub={`${pending} pending`} />
+          <StatCard icon="✅" label="Confirmed Sessions"     value={confirmed} />
+          <StatCard icon="₹"  label="Revenue Collected"      value={`₹${totalRevenue.toLocaleString('en-IN')}`} sub="completed only" />
+        </div>
+
+        {/* Tab nav */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid rgba(201,161,74,0.15)', paddingBottom: '12px' }}>
+          {['overview', 'predictions', 'bookings'].map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              style={{
+                background: tab === t ? 'rgba(201,161,74,0.15)' : 'transparent',
+                border: tab === t ? '1px solid rgba(201,161,74,0.4)' : '1px solid transparent',
+                color: tab === t ? '#c9a14a' : 'rgba(245,239,224,0.5)',
+                borderRadius: '8px', padding: '7px 18px',
+                fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                textTransform: 'capitalize', letterSpacing: '0.04em'
+              }}
+            >
+              {t}
+            </button>
           ))}
         </div>
 
-        <div className="admin-dash__grid">
-          {/* Recent sessions */}
-          <div className="card">
-            <h3 className="admin-card__title">Recent Sessions</h3>
-            {payments.length === 0
-              ? <p className="admin-empty">No sessions yet.</p>
-              : payments.slice(-5).reverse().map((p, i) => (
-                <div key={i} className="admin-row">
-                  <div>
-                    <strong>#{p.paymentId?.slice(-6)}</strong>
-                    <p>{p.slot || '—'}</p>
-                  </div>
-                  <span className="admin-badge admin-badge--green">₹{p.amount} · Completed</span>
-                </div>
-              ))
-            }
+        {dataLoading && (
+          <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(245,239,224,0.4)' }}>
+            Loading data…
           </div>
+        )}
 
-          {/* Recent users */}
-          <div className="card">
-            <h3 className="admin-card__title">Recent Users</h3>
-            {users.length === 0
-              ? <p className="admin-empty">No users yet.</p>
-              : users.slice(-5).reverse().map((u, i) => (
-                <div key={i} className="admin-row">
-                  <div>
-                    <strong>{u.name}</strong>
-                    <p>{u.sign} · {u.gender} · {u.place}</p>
-                  </div>
-                </div>
-              ))
-            }
-          </div>
+        {/* ── OVERVIEW TAB ── */}
+        {!dataLoading && tab === 'overview' && (
+          <div className="admin-dash__grid">
 
-          {/* Settings */}
-          <div className="card">
-            <h3 className="admin-card__title">Settings</h3>
-            <form onSubmit={saveSettings}>
-              <div className="form-group">
-                <label htmlFor="admin-price">Session Price (₹)</label>
-                <input id="admin-price" type="number" min="0" value={price} onChange={e => setPrice(e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label htmlFor="admin-dur">Duration (minutes)</label>
-                <input id="admin-dur" type="number" min="1" value={duration} onChange={e => setDuration(e.target.value)} />
-              </div>
-              <button type="submit" className="btn-gold btn-gold-filled" style={{ width:'100%' }}>Save Settings</button>
-            </form>
+            {/* Recent Predictions */}
+            <div className="card">
+              <h3 className="admin-card__title">🔮 Recent Free Predictions</h3>
+              {predictions.length === 0
+                ? <p className="admin-empty">No predictions yet.</p>
+                : predictions.slice(0, 6).map(p => (
+                  <div key={p.id} className="admin-row">
+                    <div>
+                      <strong>{p.name}</strong>
+                      <p style={{ fontSize: '12px', color: 'rgba(245,239,224,0.45)', marginTop: '2px' }}>
+                        {p.zodiac_sign} · {p.place} · {p.gender}
+                      </p>
+                    </div>
+                    <span style={{ fontSize: '11px', color: 'rgba(245,239,224,0.3)' }}>
+                      {new Date(p.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                    </span>
+                  </div>
+                ))
+              }
+            </div>
+
+            {/* Upcoming Bookings */}
+            <div className="card">
+              <h3 className="admin-card__title">📅 Recent Bookings</h3>
+              {bookings.length === 0
+                ? <p className="admin-empty">No bookings yet.</p>
+                : bookings.slice(0, 6).map(b => (
+                  <div key={b.id} className="admin-row">
+                    <div>
+                      <strong>{b.name}</strong>
+                      <p style={{ fontSize: '12px', color: 'rgba(245,239,224,0.45)', marginTop: '2px' }}>
+                        {b.slot_date} {b.slot_time} · {b.type}
+                      </p>
+                    </div>
+                    <Badge status={b.status} />
+                  </div>
+                ))
+              }
+            </div>
+
           </div>
-        </div>
+        )}
+
+        {/* ── PREDICTIONS TAB ── */}
+        {!dataLoading && tab === 'predictions' && (
+          <div className="card" style={{ overflowX: 'auto' }}>
+            <h3 className="admin-card__title">All Free Predictions ({predictions.length})</h3>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid rgba(201,161,74,0.2)' }}>
+                  {['Date', 'Name', 'DOB', 'Place', 'Gender', 'Sign', 'Lagna', 'Dasha', 'Lang'].map(h => (
+                    <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: '#c9a14a', fontSize: '11px', letterSpacing: '0.08em', fontWeight: 600 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {predictions.map((p, i) => (
+                  <tr key={p.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'transparent' }}>
+                    <td style={{ padding: '10px 12px', color: 'rgba(245,239,224,0.4)', whiteSpace: 'nowrap' }}>
+                      {new Date(p.created_at).toLocaleDateString('en-IN')}
+                    </td>
+                    <td style={{ padding: '10px 12px', fontWeight: 500 }}>{p.name}</td>
+                    <td style={{ padding: '10px 12px', color: 'rgba(245,239,224,0.6)' }}>{p.dob}</td>
+                    <td style={{ padding: '10px 12px', color: 'rgba(245,239,224,0.6)' }}>{p.place}</td>
+                    <td style={{ padding: '10px 12px', color: 'rgba(245,239,224,0.6)' }}>{p.gender}</td>
+                    <td style={{ padding: '10px 12px', color: '#c9a14a' }}>{p.zodiac_sign}</td>
+                    <td style={{ padding: '10px 12px', color: 'rgba(245,239,224,0.6)' }}>{p.lagna || '—'}</td>
+                    <td style={{ padding: '10px 12px', color: 'rgba(245,239,224,0.6)' }}>{p.dasha || '—'}</td>
+                    <td style={{ padding: '10px 12px', color: 'rgba(245,239,224,0.4)' }}>{p.locale}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {predictions.length === 0 && <p className="admin-empty">No predictions yet.</p>}
+          </div>
+        )}
+
+        {/* ── BOOKINGS TAB ── */}
+        {!dataLoading && tab === 'bookings' && (
+          <div className="card" style={{ overflowX: 'auto' }}>
+            <h3 className="admin-card__title">All Bookings &amp; Schedules ({bookings.length})</h3>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid rgba(201,161,74,0.2)' }}>
+                  {['Date', 'Name', 'Slot Date', 'Time', 'Type', 'Amount', 'Status', 'Action'].map(h => (
+                    <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: '#c9a14a', fontSize: '11px', letterSpacing: '0.08em', fontWeight: 600 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {bookings.map((b, i) => (
+                  <tr key={b.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'transparent' }}>
+                    <td style={{ padding: '10px 12px', color: 'rgba(245,239,224,0.4)', whiteSpace: 'nowrap' }}>
+                      {new Date(b.created_at).toLocaleDateString('en-IN')}
+                    </td>
+                    <td style={{ padding: '10px 12px', fontWeight: 500 }}>{b.name}</td>
+                    <td style={{ padding: '10px 12px', color: 'rgba(245,239,224,0.6)' }}>{b.slot_date || '—'}</td>
+                    <td style={{ padding: '10px 12px', color: 'rgba(245,239,224,0.6)' }}>{b.slot_time || '—'}</td>
+                    <td style={{ padding: '10px 12px', color: 'rgba(245,239,224,0.6)', textTransform: 'capitalize' }}>{b.type}</td>
+                    <td style={{ padding: '10px 12px', color: '#c9a14a', fontWeight: 600 }}>₹{b.amount}</td>
+                    <td style={{ padding: '10px 12px' }}><Badge status={b.status} /></td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <select
+                        value={b.status}
+                        onChange={e => updateStatus(b.id, e.target.value)}
+                        style={{
+                          background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(201,161,74,0.2)',
+                          color: '#f5efe0', borderRadius: '6px', padding: '4px 8px', fontSize: '12px', cursor: 'pointer'
+                        }}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {bookings.length === 0 && <p className="admin-empty">No bookings yet.</p>}
+          </div>
+        )}
+
       </div>
     </div>
   );

@@ -1,17 +1,20 @@
+import { useTranslation } from 'react-i18next';
 import './HowItWorks.css';
 
-const STEPS = [
-  { num: '01', icon: '📝', title: 'Fill Your Birth Details', desc: 'Enter your name, date, time and place of birth in our free prediction form.' },
-  { num: '02', icon: '🔮', title: 'Get Matched with Ayush', desc: 'Choose a convenient time slot and complete your secure booking via Razorpay.' },
-  { num: '03', icon: '🌟', title: 'Receive Guidance & Remedies', desc: 'Get your personalised Vedic analysis with actionable remedies and gemstone advice.' },
-];
-
 export default function HowItWorks() {
+  const { t } = useTranslation();
+
+  const STEPS = [
+    { num: '01', icon: '📝', title: t('hiw.steps.0.title'), desc: t('hiw.steps.0.desc') },
+    { num: '02', icon: '🔮', title: t('hiw.steps.1.title'), desc: t('hiw.steps.1.desc') },
+    { num: '03', icon: '🌟', title: t('hiw.steps.2.title'), desc: t('hiw.steps.2.desc') },
+  ];
+
   return (
     <section className="hiw gold-border-top">
       <div className="container">
-        <span className="section-label">✦ The Process ✦</span>
-        <h2 className="section-title">How It Works</h2>
+        <span className="section-label">✦ {t('hiw.label')} ✦</span>
+        <h2 className="section-title">{t('hiw.title')}</h2>
         <div className="section-divider" />
 
         <div className="hiw__steps">

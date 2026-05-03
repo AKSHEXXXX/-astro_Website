@@ -1,7 +1,15 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { getZodiacSign, getMoonSign, calculateAge, ZODIAC_SIGNS, INSIGHTS } from '../data/zodiac.js';
 import { generateBirthChart } from '../data/birthChart.js';
 import BirthChart from './BirthChart.jsx';
+import { LLMPredictionDisplay } from './LLMPredictionDisplay.jsx';
+import { SharePredictionCard } from './SharePredictionCard.jsx';
+import { FreeConsultCTA } from './FreeConsultCTA.jsx';
+import { generatePrediction } from '../geminiAPI.js';
+import { track } from '../posthog.js';
+import { useTranslation } from 'react-i18next';
+import { savePrediction } from '../lib/supabase.js';
+import { useAuth } from '../lib/AuthContext.jsx';
 import './Prediction.css';
 
 const RASI_SIGNS = ['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn','Aquarius','Pisces'];
@@ -27,6 +35,11 @@ export default function Prediction() {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [result, setResult]   = useState(null);
+  const [llmPrediction, setLlmPrediction] = useState(null);
+  const [llmLoading, setLlmLoading] = useState(false);
+  const { t, i18n } = useTranslation();
+  const { user, requireAuth } = useAuth();
+  const pendingFormRef = useRef(null);
 
   const validate = () => {
     const e = {};
@@ -43,6 +56,11 @@ export default function Prediction() {
     setErrors(errs);
     if (Object.keys(errs).length) return;
 
+    // Require auth before running prediction
+    requireAuth(() => runPrediction());
+  };
+
+  const runPrediction = () => {
     setLoading(true);
     setResult(null);
 
@@ -56,15 +74,10 @@ export default function Prediction() {
       const age   = calculateAge(form.dob);
       const insight = INSIGHTS[sign];
 
-      // Generate full Vedic birth chart (safe — won't crash on bad input)
       let birthChartData = null;
       try {
         birthChartData = generateBirthChart(
-          form.name,
-          form.dob,
-          form.tob || '',
-          form.place,
-          form.gender
+          form.name, form.dob, form.tob || '', form.place, form.gender
         );
       } catch (err) {
         console.warn('Birth chart calculation error:', err);
@@ -74,15 +87,57 @@ export default function Prediction() {
       setResult(res);
       setLoading(false);
 
-      // Persist for admin
-      const users = JSON.parse(localStorage.getItem('astroUsers') || '[]');
-      users.push({ name:form.name, sign, place:form.place, gender:form.gender, dob:form.dob, timestamp:new Date().toISOString() });
-      localStorage.setItem('astroUsers', JSON.stringify(users));
+      track('prediction_form_submitted', {
+        has_birth_time: !!form.tob,
+        gender: form.gender,
+        locale: i18n.language
+      });
+
+      if (birthChartData) {
+        setLlmLoading(true);
+        generatePrediction({
+          name: form.name,
+          dob: form.dob,
+          gender: form.gender,
+          lagna: birthChartData.ascendant,
+          sunSign: sign,
+          moonSign: moon,
+          nakshatra: birthChartData.nakshatra,
+          currentDasha: birthChartData.dasha?.current?.planet,
+          planets: Object.values(birthChartData.planets || {})
+        }, i18n.language).then(prediction => {
+          setLlmPrediction(prediction);
+          track('prediction_result_viewed', { zodiac_sign: sign, locale: i18n.language });
+          savePrediction({
+            name:      form.name,
+            dob:       form.dob,
+            tob:       form.tob,
+            place:     form.place,
+            gender:    form.gender,
+            zodiacSign: sign,
+            moonSign:  moon,
+            nakshatra: birthChartData?.nakshatra?.name,
+            lagna:     birthChartData?.ascendant?.rashiName,
+            dasha:     birthChartData?.dasha?.current?.planet,
+            tagline:   prediction?.summaryTagline,
+            locale:    i18n.language,
+            userId:    user?.id,
+          });
+        }).catch(err => {
+          console.error(err);
+          track('prediction_llm_error', { zodiac_sign: sign, locale: i18n.language, error: err?.message });
+        }).finally(() => {
+          setLlmLoading(false);
+        });
+      }
     }, 2500);
   };
 
+
   const reset = () => {
     setResult(null);
+    setLlmPrediction(null);
+    setLlmLoading(false);
     setForm({ name:'', dob:'', tob:'', place:'', gender:'' });
     setErrors({});
   };
@@ -91,29 +146,29 @@ export default function Prediction() {
     <section id="prediction" className="prediction gold-border-top">
       <div className="container">
         <span className="section-label">✦ Free Cosmic Reading ✦</span>
-        <h2 className="section-title">Get Your Free Cosmic Reading</h2>
-        <p className="prediction__sub">Enter your birth details — receive your Vedic blueprint instantly.</p>
+        <h2 className="section-title">{t('prediction.title')}</h2>
+        <p className="prediction__sub">{t('prediction.sub')}</p>
         <div className="section-divider" />
 
         {/* ── Prediction Form ── */}
         {!result && !loading && (
           <form className="pred-form card" onSubmit={handleSubmit} noValidate>
             <div className="form-group">
-              <label htmlFor="pred-name">Full Name *</label>
-              <input id="pred-name" type="text" placeholder="As per birth records"
+              <label htmlFor="pred-name">{t('prediction.nameLabel')} *</label>
+              <input id="pred-name" type="text" placeholder={t('prediction.namePlaceholder')}
                 value={form.name} onChange={e => setForm(f=>({...f, name:e.target.value}))} />
               {errors.name && <span className="field-error">{errors.name}</span>}
             </div>
 
             <div className="pred-form__row">
               <div className="form-group">
-                <label htmlFor="pred-dob">Date of Birth *</label>
+                <label htmlFor="pred-dob">{t('prediction.dobLabel')} *</label>
                 <input id="pred-dob" type="date"
                   value={form.dob} onChange={e => setForm(f=>({...f, dob:e.target.value}))} />
                 {errors.dob && <span className="field-error">{errors.dob}</span>}
               </div>
               <div className="form-group">
-                <label htmlFor="pred-tob">Time of Birth <small>(recommended for accurate Lagna)</small></label>
+                <label htmlFor="pred-tob">{t('prediction.tobLabel')}</label>
                 <input id="pred-tob" type="time"
                   value={form.tob} onChange={e => setForm(f=>({...f, tob:e.target.value}))} />
               </div>
@@ -121,13 +176,13 @@ export default function Prediction() {
 
             <div className="pred-form__row">
               <div className="form-group">
-                <label htmlFor="pred-place">Place of Birth *</label>
+                <label htmlFor="pred-place">{t('prediction.pobLabel')} *</label>
                 <input id="pred-place" type="text" placeholder="City, State"
                   value={form.place} onChange={e => setForm(f=>({...f, place:e.target.value}))} />
                 {errors.place && <span className="field-error">{errors.place}</span>}
               </div>
               <div className="form-group">
-                <label htmlFor="pred-gender">Gender *</label>
+                <label htmlFor="pred-gender">{t('prediction.genderLabel')} *</label>
                 <select id="pred-gender" value={form.gender}
                   onChange={e => setForm(f=>({...f, gender:e.target.value}))}>
                   <option value="">Select...</option>
@@ -140,7 +195,7 @@ export default function Prediction() {
             </div>
 
             <button type="submit" className="btn-gold btn-gold-filled pred-form__submit">
-              ✨ Generate Prediction
+              ✨ {t('prediction.generateBtn')}
             </button>
           </form>
         )}
@@ -153,14 +208,14 @@ export default function Prediction() {
                 <span key={i} style={{ '--i': i }}>{s}</span>
               ))}
             </div>
-            <p>Calculating your cosmic blueprint…</p>
+            <p>{t('prediction.generating')}</p>
           </div>
         )}
 
         {/* ── Result ── */}
         {result && (
           <div className="pred-result card fade-in">
-            <h3 className="pred-result__title">✦ Your Cosmic Profile</h3>
+            <h3 className="pred-result__title">✦ {t('result.cosmicProfile')}</h3>
 
             {/* Summary rows */}
             <div className="pred-result__grid">
@@ -190,11 +245,8 @@ export default function Prediction() {
               ))}
             </div>
 
-            {/* Insight */}
-            <div className="pred-result__insight">
-              <h4>Personality Insight</h4>
-              <p>{result.insight}</p>
-            </div>
+            {/* ── LLM Prediction ── */}
+            <LLMPredictionDisplay prediction={llmPrediction} loading={llmLoading} />
 
             {/* South Indian Rasi Chart */}
             <RasiChart sunSign={result.sign} />
@@ -202,15 +254,22 @@ export default function Prediction() {
             {/* ── North Indian Janma Kundali ── */}
             {result.birthChartData && <BirthChart chartData={result.birthChartData} />}
 
-            {/* Upsell */}
-            <div className="pred-result__upsell">
-              <p>✨ Want a complete birth chart analysis with remedies & forecast?</p>
-              <a href="#booking" className="btn-gold btn-gold-filled" onClick={reset}>
-                Book a 30-min Session with Ayush → ₹500 only
-              </a>
-            </div>
+            {/* Share and CTA */}
+            {llmPrediction && (
+              <>
+                <SharePredictionCard 
+                  name={result.name}
+                  zodiacSign={result.sign}
+                  moonSign={result.moon}
+                  lagna={result.birthChartData?.ascendant?.rashiName || 'Unknown'}
+                  currentDasha={result.birthChartData?.dasha?.current?.planet || 'Unknown'}
+                  tagline={llmPrediction.summaryTagline}
+                />
+                <FreeConsultCTA />
+              </>
+            )}
 
-            <button className="pred-result__reset" onClick={reset}>← New Prediction</button>
+            <button className="pred-result__reset" onClick={reset}>{t('result.newPrediction')}</button>
           </div>
         )}
       </div>

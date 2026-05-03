@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import './Panchang.css';
 
 function getTithi(date) {
@@ -25,8 +26,10 @@ const RAHU_KALAM = ['7:30–9:00 AM','4:30–6:00 PM','3:00–4:30 PM','1:30–3
 
 export default function Panchang() {
   const today = useMemo(() => new Date(), []);
+  const { t, i18n } = useTranslation();
 
-  const dateStr = today.toLocaleDateString('en-IN', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  const locale = i18n.language.startsWith('hi') ? 'hi-IN' : 'en-IN';
+  const dateStr = today.toLocaleDateString(locale, { weekday:'long', year:'numeric', month:'long', day:'numeric' });
   const tithi    = getTithi(today);
   const nakshatra = getNakshatra(today);
   const yoga     = getYoga(today);
@@ -34,11 +37,11 @@ export default function Panchang() {
   const rahuKalam = RAHU_KALAM[today.getDay()];
 
   const rows = [
-    { label: 'Tithi',      value: tithi },
-    { label: 'Nakshatra',  value: nakshatra },
-    { label: 'Yoga',       value: yoga },
-    { label: 'Karana',     value: karana },
-    { label: 'Rahu Kalam', value: rahuKalam },
+    { label: t('panchang.tithi'),      value: tithi },
+    { label: t('panchang.nakshatra'),  value: nakshatra },
+    { label: t('panchang.yoga'),       value: yoga },
+    { label: t('panchang.karana'),     value: karana },
+    { label: t('panchang.rahuKalam'), value: rahuKalam },
   ];
 
   return (
@@ -48,7 +51,7 @@ export default function Panchang() {
           <div className="panchang__header">
             <span className="panchang__icon">📿</span>
             <div>
-              <h3 className="panchang__title">Today's Panchang</h3>
+              <h3 className="panchang__title">{t('panchang.title')}</h3>
               <p className="panchang__date">{dateStr}</p>
             </div>
           </div>

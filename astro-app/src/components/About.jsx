@@ -1,25 +1,22 @@
+import { useTranslation } from 'react-i18next';
 import './About.css';
 
-const CREDENTIALS = [
-  { icon: '🎓', label: 'Certified Jyotish Practitioner' },
-  { icon: '👥', label: '500+ Consultations' },
-  { icon: '📅', label: 'Since 2020' },
-];
-
-const SPECIALTIES = [
-  'Birth Chart Analysis',
-  'Career & Finance',
-  'Relationship Compatibility',
-  'Muhurta (Auspicious Timing)',
-  'Remedies & Gemstone Advice',
-];
-
 export default function About() {
+  const { t } = useTranslation();
+
+  const CREDENTIALS = [
+    { icon: '🎓', label: t('about.creds.jyotish') },
+    { icon: '👥', label: t('about.creds.consults') },
+    { icon: '📅', label: t('about.creds.since') },
+  ];
+
+  const SPECIALTIES = t('about.specs', { returnObjects: true });
+
   return (
     <section id="about" className="about gold-border-top">
       <div className="container">
-        <span className="section-label">✦ The Astrologer ✦</span>
-        <h2 className="section-title">Meet Your Astrologer</h2>
+        <span className="section-label">✦ {t('about.label')} ✦</span>
+        <h2 className="section-title">{t('about.title')}</h2>
         <div className="section-divider" />
 
         <div className="about__grid">
@@ -41,13 +38,10 @@ export default function About() {
           {/* Info */}
           <div className="about__info">
             <h3 className="about__name">Shree Ayush Saxena</h3>
-            <p className="about__tagline">Vedic Astrologer · Jyotish Practitioner</p>
+            <p className="about__tagline">{t('about.tagline')}</p>
 
             <p className="about__bio">
-              With over 5 years of dedicated study in Vedic astrology, Jyotish, and Nadi techniques,
-              I have guided 500+ individuals through life's most critical crossroads — career, marriage,
-              health, and spiritual growth. My readings combine classical Parashari methods with modern
-              psychological insight.
+              {t('about.bio')}
             </p>
 
             <div className="about__badges">
@@ -60,7 +54,7 @@ export default function About() {
             </div>
 
             <div className="about__specialties">
-              <h4 className="about__spec-title">Specialties</h4>
+              <h4 className="about__spec-title">{t('about.specialties')}</h4>
               <ul>
                 {SPECIALTIES.map(s => (
                   <li key={s}><span className="about__dot">◆</span>{s}</li>

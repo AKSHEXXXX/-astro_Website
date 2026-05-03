@@ -1,13 +1,16 @@
+import { useTranslation } from 'react-i18next';
 import './Footer.css';
 
 export default function Footer() {
+  const { t } = useTranslation();
+
   return (
     <>
       {/* Pre-footer CTA band */}
       <div className="prefooter">
         <div className="container prefooter__inner">
-          <h2 className="prefooter__title">Ready to Unlock Your Destiny?</h2>
-          <a href="#prediction" className="btn-gold btn-gold-filled">Book Free Reading</a>
+          <h2 className="prefooter__title">{t('footer.preTitle')}</h2>
+          <a href="#prediction" className="btn-gold btn-gold-filled">{t('footer.bookFree')}</a>
         </div>
       </div>
 
@@ -16,16 +19,16 @@ export default function Footer() {
           {/* Col 1 */}
           <div className="footer__col">
             <div className="footer__logo">🌙 Shree Ayush Saxena</div>
-            <p className="footer__tagline">Vedic Astrologer guiding souls through the cosmic map of their destiny since 2020.</p>
+            <p className="footer__tagline">{t('footer.tagline')}</p>
           </div>
 
           {/* Col 2 */}
           <div className="footer__col">
-            <h4 className="footer__col-title">Quick Links</h4>
+            <h4 className="footer__col-title">{t('footer.links')}</h4>
             <nav aria-label="Footer navigation">
               {['#home','#about','#prediction','#services','#contact'].map((h, i) => (
                 <a key={h} href={h} className="footer__link">
-                  {['Home','About','Prediction','Services','Contact'][i]}
+                  {t(`nav.${['home','about','prediction','services','contact'][i]}`)}
                 </a>
               ))}
             </nav>
@@ -33,7 +36,7 @@ export default function Footer() {
 
           {/* Col 3 */}
           <div className="footer__col">
-            <h4 className="footer__col-title">Contact</h4>
+            <h4 className="footer__col-title">{t('footer.contact')}</h4>
             <a href="mailto:ayush@cosmicguidance.in" className="footer__link">
               ✉ ayush@cosmicguidance.in
             </a>
@@ -57,11 +60,11 @@ export default function Footer() {
 
         <div className="footer__bottom">
           <div className="container footer__bottom-inner">
-            <p>© 2025 Shree Ayush Saxena. All Rights Reserved.</p>
+            <p>© 2025 Shree Ayush Saxena. {t('footer.rights')}</p>
             <div className="footer__bottom-links">
-              <button className="footer__policy-btn" onClick={() => document.getElementById('privacy-modal').showModal()}>Privacy Policy</button>
+              <button className="footer__policy-btn" onClick={() => document.getElementById('privacy-modal').showModal()}>{t('footer.privacy')}</button>
               <span>·</span>
-              <button className="footer__policy-btn" onClick={() => document.getElementById('terms-modal').showModal()}>Terms</button>
+              <button className="footer__policy-btn" onClick={() => document.getElementById('terms-modal').showModal()}>{t('footer.terms')}</button>
             </div>
           </div>
         </div>
@@ -70,16 +73,16 @@ export default function Footer() {
       {/* Privacy Policy Modal */}
       <dialog id="privacy-modal" className="policy-dialog">
         <button className="policy-dialog__close" onClick={() => document.getElementById('privacy-modal').close()} aria-label="Close">✕</button>
-        <h2>Privacy Policy</h2>
-        <p>Your personal details (name, date of birth, place of birth) are used solely to generate your astrology reading. We do not sell or share your data with any third party. Payment information is handled securely by Razorpay and is never stored on our servers. By using this service you consent to this use.</p>
+        <h2>{t('footer.privacy')}</h2>
+        <p>{t('footer.privacyText')}</p>
         <p style={{marginTop:'1rem'}}>Last updated: January 2025.</p>
       </dialog>
 
       {/* Terms Modal */}
       <dialog id="terms-modal" className="policy-dialog">
         <button className="policy-dialog__close" onClick={() => document.getElementById('terms-modal').close()} aria-label="Close">✕</button>
-        <h2>Terms of Service</h2>
-        <p>Consultations provided are for entertainment and guidance purposes only. Predictions are based on traditional Vedic astrology and do not constitute medical, legal, or financial advice. Results may vary. All sessions are non-refundable once confirmed. By booking a session you agree to these terms.</p>
+        <h2>{t('footer.terms')}</h2>
+        <p>{t('footer.termsText')}</p>
         <p style={{marginTop:'1rem'}}>Last updated: January 2025.</p>
       </dialog>
     </>

@@ -1,12 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import './Stats.css';
-
-const STATS = [
-  { value: 500, suffix: '+', label: 'Consultations' },
-  { value: 5,   suffix: '+', label: 'Years Experience' },
-  { value: 98,  suffix: '%', label: 'Client Satisfaction' },
-  { value: 12,  suffix: '',  label: 'Specialties' },
-];
 
 function useCountUp(target, started) {
   const [count, setCount] = useState(0);
@@ -45,6 +39,15 @@ function StatItem({ value, suffix, label }) {
 }
 
 export default function Stats() {
+  const { t } = useTranslation();
+
+  const STATS = [
+    { value: 500, suffix: '+', label: t('stats.consultations') },
+    { value: 5,   suffix: '+', label: t('stats.experience') },
+    { value: 98,  suffix: '%', label: t('stats.satisfaction') },
+    { value: 12,  suffix: '',  label: t('stats.specialties') },
+  ];
+
   return (
     <div className="stats-bar">
       <div className="stats-bar__inner container">
