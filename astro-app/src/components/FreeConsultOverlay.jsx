@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { track } from '../posthog.js';
+import { useAuth } from '../lib/AuthContext.jsx';
 
 export default function FreeConsultOverlay() {
   const [show, setShow] = useState(false);
   const { t } = useTranslation();
+  const { requireAuth, hasClaimedFreeConsult } = useAuth();
 
   useEffect(() => {
     // Show overlay after 5 seconds
@@ -24,7 +26,7 @@ export default function FreeConsultOverlay() {
     localStorage.setItem('hasSeenFreeConsult', 'true');
   };
 
-  if (!show) return null;
+  if (!show || hasClaimedFreeConsult) return null;
 
   return (
     <div style={{
@@ -89,9 +91,15 @@ export default function FreeConsultOverlay() {
           }}
           onMouseOver={(e) => e.target.style.transform = 'scale(1.05)'}
           onMouseOut={(e) => e.target.style.transform = 'scale(1)'}
-          onClick={() => track('free_consult_overlay_cta_clicked', {})}
+          onClick={() => {
+            track('free_consult_overlay_cta_clicked', {});
+            requireAuth(() => {
+              closeOverlay();
+              window.location.href = '#booking';
+            });
+          }}
           >
-            {t('overlay.signIn', 'Sign In to Claim')}
+            {t('overlay.signIn', 'Claim Free Session')}
           </button>
           
           <button 

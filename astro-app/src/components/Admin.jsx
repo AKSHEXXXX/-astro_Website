@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
+import { useAuth } from '../lib/AuthContext.jsx';
 import './Admin.css';
 
 /* ── Stat card ─────────────────────────────────────────────────── */
@@ -33,12 +34,17 @@ function Badge({ status }) {
 }
 
 /* ── Main Admin component ───────────────────────────────────────── */
+const ADMIN_EMAILS = [
+  'admin@gmail.com',
+  'akshatsaxena.work@gmail.com'
+];
+
 export default function Admin() {
-  const [authed,      setAuthed]      = useState(false);
+  const { user, loading: authLoading, dataVersion, signOut } = useAuth();
   const [email,       setEmail]       = useState('');
   const [password,    setPassword]    = useState('');
   const [err,         setErr]         = useState('');
-  const [loading,     setLoading]     = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
 
   // Data
   const [predictions, setPredictions] = useState([]);
@@ -46,62 +52,46 @@ export default function Admin() {
   const [tab,         setTab]         = useState('overview'); // 'overview' | 'predictions' | 'bookings'
   const [dataLoading, setDataLoading] = useState(false);
 
-  /* ── Auth: check existing session on mount ─ */
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setAuthed(true);
-    });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAuthed(!!session);
-    });
-    return () => listener.subscription.unsubscribe();
-  }, []);
-
   /* ── Load data when authed ─ */
   const loadData = useCallback(async () => {
     setDataLoading(true);
-    const [{ data: preds }, { data: books }] = await Promise.all([
+    const [predsRes, booksRes] = await Promise.all([
       supabase.from('free_predictions').select('*').order('created_at', { ascending: false }),
       supabase.from('bookings').select('*').order('created_at', { ascending: false }),
     ]);
-    setPredictions(preds || []);
-    setBookings(books || []);
+    if (predsRes.error) console.error('Error loading predictions:', predsRes.error);
+    if (booksRes.error) console.error('Error loading bookings:', booksRes.error);
+    setPredictions(predsRes.data || []);
+    setBookings(booksRes.data || []);
     setDataLoading(false);
   }, []);
 
-  useEffect(() => { if (authed) loadData(); }, [authed, loadData]);
+  const isAdmin = user && ADMIN_EMAILS.includes(user.email);
+
+  useEffect(() => {
+    if (isAdmin) loadData();
+  }, [isAdmin, loadData, dataVersion]);
 
   /* ── Login ─ */
   const login = async (e) => {
     e.preventDefault();
-    setLoading(true); setErr('');
+    setLoginLoading(true); setErr('');
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) setErr(error.message);
-    setLoading(false);
+    setLoginLoading(false);
   };
 
-  /* ── Logout ─ */
-  const logout = async () => {
-    await supabase.auth.signOut();
-    setAuthed(false);
-  };
-
-  /* ── Update booking status ─ */
-  const updateStatus = async (id, status) => {
-    await supabase.from('bookings').update({ status }).eq('id', id);
-    loadData();
-  };
-
-  // ── Computed stats ───
-  const totalRevenue = bookings.filter(b => b.status === 'completed').reduce((s, b) => s + (b.amount || 0), 0);
-  const pending      = bookings.filter(b => b.status === 'pending').length;
-  const confirmed    = bookings.filter(b => b.status === 'confirmed').length;
-  const todayPreds   = predictions.filter(p => p.created_at?.startsWith(new Date().toISOString().slice(0, 10))).length;
+  /* ════════════════════════════════════
+     LOADING STATE
+  ════════════════════════════════════ */
+  if (authLoading) {
+    return <div className="admin-login"><p>Verifying access...</p></div>;
+  }
 
   /* ════════════════════════════════════
      LOGIN SCREEN
   ════════════════════════════════════ */
-  if (!authed) {
+  if (!user) {
     return (
       <div className="admin-login">
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>
@@ -133,9 +123,9 @@ export default function Admin() {
             type="submit"
             className="btn-gold btn-gold-filled"
             style={{ width: '100%', marginTop: '0.5rem' }}
-            disabled={loading}
+            disabled={loginLoading}
           >
-            {loading ? 'Signing in…' : 'Sign In'}
+            {loginLoading ? 'Signing in…' : 'Sign In'}
           </button>
           <a href="/" className="btn-gold btn-gold-outline" style={{ display: 'block', textAlign: 'center', width: '100%', marginTop: '10px', textDecoration: 'none' }}>
             ← Back to Site
@@ -147,6 +137,40 @@ export default function Admin() {
       </div>
     );
   }
+
+  /* ════════════════════════════════════
+     ACCESS DENIED (If logged in but not admin)
+  ════════════════════════════════════ */
+  if (!isAdmin) {
+    return (
+      <div className="admin-login">
+        <div className="card" style={{ textAlign: 'center', padding: '40px' }}>
+          <h2 style={{ color: '#f87171', marginBottom: '1rem' }}>⚠ Access Denied</h2>
+          <p style={{ fontSize: '14px', color: 'rgba(245,239,224,0.6)', marginBottom: '2rem' }}>
+            Your account ({user.email}) does not have administrator privileges.
+          </p>
+          <button onClick={() => signOut()} className="btn-gold btn-gold-outline" style={{ width: '100%' }}>
+            Sign Out & Try Another Account
+          </button>
+          <a href="/" style={{ display: 'block', marginTop: '1rem', color: '#c9a14a', fontSize: '13px' }}>
+            Return to Homepage
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Update booking status ─ */
+  const updateStatus = async (id, status) => {
+    await supabase.from('bookings').update({ status }).eq('id', id);
+    loadData();
+  };
+
+  // ── Computed stats ───
+  const totalRevenue = bookings.filter(b => b.status === 'completed').reduce((s, b) => s + (b.amount || 0), 0);
+  const pending      = bookings.filter(b => b.status === 'pending').length;
+  const confirmed    = bookings.filter(b => b.status === 'confirmed').length;
+  const todayPreds   = predictions.filter(p => p.created_at?.startsWith(new Date().toISOString().slice(0, 10))).length;
 
   /* ════════════════════════════════════
      DASHBOARD
@@ -206,7 +230,7 @@ export default function Admin() {
               ↺ Refresh
             </button>
             <button
-              onClick={logout}
+              onClick={signOut}
               style={{
                 background: 'transparent',
                 border: '1px solid rgba(201,161,74,0.4)',

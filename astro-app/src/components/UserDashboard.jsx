@@ -23,7 +23,7 @@ function Badge({ status }) {
 }
 
 export default function UserDashboard() {
-  const { user, signOut } = useAuth();
+  const { user, dataVersion, signOut } = useAuth();
   const [bookings,    setBookings]    = useState([]);
   const [predictions, setPredictions] = useState([]);
   const [tab,         setTab]         = useState('bookings');
@@ -33,15 +33,17 @@ export default function UserDashboard() {
     if (!user) return;
     (async () => {
       setLoading(true);
-      const [{ data: b }, { data: p }] = await Promise.all([
+      const [booksRes, predsRes] = await Promise.all([
         supabase.from('bookings').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('free_predictions').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
       ]);
-      setBookings(b || []);
-      setPredictions(p || []);
+      if (booksRes.error) console.error('Error loading dashboard bookings:', booksRes.error);
+      if (predsRes.error) console.error('Error loading dashboard predictions:', predsRes.error);
+      setBookings(booksRes.data || []);
+      setPredictions(predsRes.data || []);
       setLoading(false);
     })();
-  }, [user]);
+  }, [user, dataVersion]);
 
   const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Seeker';
   const avatar      = user?.user_metadata?.avatar_url;

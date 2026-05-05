@@ -18,12 +18,18 @@ import Admin      from './components/Admin';
 import FreeConsultOverlay from './components/FreeConsultOverlay';
 import AuthModal  from './components/AuthModal';
 import UserDashboard from './components/UserDashboard';
+import BlogSection from './components/BlogSection';
+import BlogPost    from './components/BlogPost';
+import { BLOG_POSTS } from './data/blogData.js';
 
 export default function App() {
   const { t } = useTranslation();
   const { user } = useAuth();
   // Show admin panel only when ?admin=true is in the URL
   const isAdmin = new URLSearchParams(window.location.search).get('admin') === 'true';
+
+  // Blog routing
+  const [selectedPost, setSelectedPost] = useState(null);
 
   // Mobile sticky bar: hide when booking section is visible
   const bookingRef = useRef(null);
@@ -51,6 +57,22 @@ export default function App() {
     );
   }
 
+  // Single Blog Post View
+  if (selectedPost) {
+    const post = BLOG_POSTS.find(p => p.slug === selectedPost);
+    return (
+      <>
+        <StarCanvas />
+        <Navbar />
+        <AuthModal />
+        <main id="main-content">
+          <BlogPost post={post} onBack={() => setSelectedPost(null)} />
+        </main>
+        <Footer />
+      </>
+    );
+  }
+
   return (
     <>
       <StarCanvas />
@@ -72,6 +94,7 @@ export default function App() {
         <HowItWorks />
         <Testimonials />
         <Panchang />
+        <BlogSection onSelectPost={(slug) => setSelectedPost(slug)} />
         <Booking />
       </main>
 

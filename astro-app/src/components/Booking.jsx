@@ -46,34 +46,39 @@ export default function Booking() {
   const [booking, setBooking] = useState(false);
   const [done, setDone] = useState(false);
   const { t } = useTranslation();
-  const { user, requireAuth } = useAuth();
+  const { user, requireAuth, hasClaimedFreeConsult, refreshClaimStatus } = useAuth();
+  
+  const isFree = user && !hasClaimedFreeConsult;
+  const currentAmount = isFree ? 0 : 500;
 
   const dayLabel = `${DAY_NAMES[days[selDay].getDay()]} ${days[selDay].getDate()} ${MON_NAMES[days[selDay].getMonth()]}`;
 
-  const handleBook = () => {
-    requireAuth(async () => {
-      if (!selSlot) return;
-      setBooking(true);
-      track('booking_payment_initiated', { day: dayLabel, slot: selSlot, amount: 500 });
-      const { error } = await supabase.from('bookings').insert({
-        name:      user?.user_metadata?.full_name || user?.email || 'Guest',
-        email:     user?.email,
-        slot_date: days[selDay].toISOString().slice(0, 10),
-        slot_time: selSlot,
-        type:      'consultation',
-        amount:    500,
-        status:    'pending',
-        user_id:   user?.id,
-      });
-      setBooking(false);
-      if (!error) {
-        setDone(true);
-        setSelSlot(null);
-        track('booking_completed', { day: dayLabel, slot: selSlot, amount: 500 });
-      } else {
-        alert('Something went wrong. Please try again.');
-      }
+  const handleBook = async () => {
+    if (!selSlot || !user) return;
+    setBooking(true);
+    track('booking_payment_initiated', { day: dayLabel, slot: selSlot, amount: currentAmount });
+    const { error } = await supabase.from('bookings').insert({
+      name:      user?.user_metadata?.full_name || user?.email || 'Guest',
+      email:     user?.email,
+      slot_date: days[selDay].toISOString().slice(0, 10),
+      slot_time: selSlot,
+      type:      'consultation',
+      amount:    currentAmount,
+      status:    'pending',
+      user_id:   user.id,
     });
+    console.log('Booking attempt result:', { error });
+    setBooking(false);
+    if (!error) {
+      console.log('Booking successful, refreshing status...');
+      setDone(true);
+      setSelSlot(null);
+      refreshClaimStatus();
+      track('booking_completed', { day: dayLabel, slot: selSlot, amount: currentAmount });
+    } else {
+      console.error('Booking failed:', error);
+      alert('Something went wrong. Please try again.');
+    }
   };
 
   const FEATURES = [
@@ -141,7 +146,10 @@ export default function Booking() {
 
             <div className="booking__total">
               <span>{t('booking.total')}</span>
-              <span className="booking__price">₹500 <small>{t('booking.period')}</small></span>
+              <span className="booking__price">
+                ₹{currentAmount} {isFree && <span style={{ color: '#4ade80', fontSize: '0.8rem', marginLeft: '6px' }}>(Free First Consultation)</span>}
+                <small>{t('booking.period')}</small>
+              </span>
             </div>
 
             {done && (
@@ -156,10 +164,16 @@ export default function Booking() {
 
             <button
               className="btn-gold btn-gold-filled booking__pay"
-              disabled={!selSlot || booking}
-              onClick={handleBook}
+              disabled={(!selSlot && user) || booking}
+              onClick={() => user ? handleBook() : requireAuth()}
             >
-              {booking ? 'Booking…' : selSlot ? `${t('booking.payBtn')}${selSlot}` : t('booking.selectSlot')}
+              {!user 
+                ? 'Sign In to Book'
+                : booking 
+                  ? 'Booking…' 
+                  : selSlot 
+                    ? `💳 ${currentAmount === 0 ? 'Claim Free' : 'Pay ₹500'} — ${selSlot}`
+                    : t('booking.selectSlot')}
             </button>
           </div>
         </div>
